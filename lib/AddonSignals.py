@@ -87,13 +87,14 @@ class SignalReceiver(xbmc.Monitor):
 
 
 class CallHandler:
-    def __init__(self, signal, data, source_id, timeout=1000):
+    def __init__(self, signal, data, source_id, timeout=1000, use_timeout_exception=False):
         self.signal = signal
         self.data = data
         self.timeout = timeout
         self.sourceID = source_id
         self._return = None
         self.is_callback_received = False
+        self.use_timeout_exception = use_timeout_exception
         registerSlot(self.sourceID, '_return.{0}'.format(self.signal), self.callback)
         sendSignal(signal, data, self.sourceID)
 
@@ -105,6 +106,9 @@ class CallHandler:
         end_time = _perf_clock() + (self.timeout / 1000)
         while not self.is_callback_received:
             if _perf_clock() > end_time:
+                if self.use_timeout_exception:
+                    unRegisterSlot(self.sourceID, self.signal)
+                    raise TimeoutError
                 break
             xbmc.sleep(10)
         unRegisterSlot(self.sourceID, self.signal)
@@ -112,6 +116,12 @@ class CallHandler:
 
 
 def registerSlot(signaler_id, signal, callback):
+    """
+    Register a slot for a function callback
+    :param signaler_id: the name used for call/answer (e.g. add-on id)
+    :param signal: name of the function to call (can be the same used in returnCall/makeCall/...)
+    :param callback: the function to call
+    """
     receiver = _getReceiver()
     receiver.registerSlot(signaler_id, signal, callback)
 
@@ -138,8 +148,23 @@ def registerCall(signaler_id, signal, callback):
 
 
 def returnCall(signal, data=None, source_id=None):
+    """
+    Make a return call to the target add-on
+    :param signal: name of the function to call (can be the same used in registerSlot/makeCall/...)
+    :param data: data to send
+    :param source_id: the name used for call/answer (e.g. add-on id)
+    """
     sendSignal('_return.{0}'.format(signal), data, source_id)
 
 
-def makeCall(signal, data=None, source_id=None, timeout_ms=1000):
-    return CallHandler(signal, data, source_id, timeout_ms).waitForReturn()
+def makeCall(signal, data=None, source_id=None, timeout_ms=1000, use_timeout_exception=False):
+    """
+    Make a call to the source add-on
+    :param signal: name of the function to call (can be the same used in registerSlot/returnCall/...)
+    :param data: data to send
+    :param source_id: the name used for call/answer (e.g. add-on id)
+    :param timeout_ms: maximum waiting time before the timeout
+    :param use_timeout_exception: if True when the timeout occurs will raise the exception 'TimeoutError'
+             (allow to return 'None' value from the callback data)
+    """
+    return CallHandler(signal, data, source_id, timeout_ms, use_timeout_exception).waitForReturn()
