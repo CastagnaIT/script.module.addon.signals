@@ -1,12 +1,23 @@
 # -*- coding: utf-8 -*-
 
-import sys
 import base64
 import json
+import sys
+import time
 import xbmc
 import xbmcaddon
 
 RECEIVER = None
+
+
+def _perf_clock():
+    """Provides high resolution timing in seconds"""
+    if hasattr(time, 'clock'):  # Python <= 3.3
+        return time.clock()  # pylint: disable=no-member
+    if hasattr(time, 'perf_counter'):  # Python >= 3.3
+        # "* 1e-6" convert [us] to [s]
+        return time.perf_counter() * 1e-6  # pylint: disable=no-member
+    return time.time()  # Fallback
 
 
 def _getReceiver():
@@ -82,22 +93,21 @@ class CallHandler:
         self.timeout = timeout
         self.sourceID = source_id
         self._return = None
+        self.is_callback_received = False
         registerSlot(self.sourceID, '_return.{0}'.format(self.signal), self.callback)
         sendSignal(signal, data, self.sourceID)
 
     def callback(self, data):
         self._return = data
+        self.is_callback_received = True
 
     def waitForReturn(self):
-        waited = 0
-        while waited < self.timeout:
-            if self._return is not None:
+        end_time = _perf_clock() + (self.timeout / 1000)
+        while not self.is_callback_received:
+            if _perf_clock() > end_time:
                 break
-            xbmc.sleep(100)
-            waited += 100
-
+            xbmc.sleep(10)
         unRegisterSlot(self.sourceID, self.signal)
-
         return self._return
 
 
