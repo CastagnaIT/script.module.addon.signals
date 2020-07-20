@@ -86,7 +86,7 @@ class SignalReceiver(xbmc.Monitor):
         self._slots[sender][signal](_decodeData(data))
 
 
-class CallHandler:
+class CallHandler(object):
     def __init__(self, signal, data, source_id, timeout=1000, use_timeout_exception=False):
         self.signal = signal
         self.data = data
@@ -103,6 +103,7 @@ class CallHandler:
         self.is_callback_received = True
 
     def waitForReturn(self):
+        monitor = xbmc.Monitor()
         end_time = _perf_clock() + (self.timeout / 1000)
         while not self.is_callback_received:
             if _perf_clock() > end_time:
@@ -110,6 +111,8 @@ class CallHandler:
                     unRegisterSlot(self.sourceID, self.signal)
                     raise TimeoutError
                 break
+            elif monitor.abortRequested():
+                raise OSError
             xbmc.sleep(10)
         unRegisterSlot(self.sourceID, self.signal)
         return self._return
